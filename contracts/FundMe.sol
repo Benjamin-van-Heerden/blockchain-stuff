@@ -4,38 +4,45 @@ pragma solidity ^0.8.12;
 // import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol"; // this is the interface for the chainlink oracle
 // on a real project, we would use the npm package to import the interface, here we are just using the interface directly
 interface AggregatorV3Interface {
-  function decimals() external view returns (uint8);
+    function decimals() external view returns (uint8);
 
-  function description() external view returns (string memory);
+    function description() external view returns (string memory);
 
-  function version() external view returns (uint256);
+    function version() external view returns (uint256);
 
-  function getRoundData(uint80 _roundId)
-    external
-    view
-    returns (
-      uint80 roundId,
-      int256 answer,
-      uint256 startedAt,
-      uint256 updatedAt,
-      uint80 answeredInRound
-    );
+    function getRoundData(
+        uint80 _roundId
+    )
+        external
+        view
+        returns (
+            uint80 roundId,
+            int256 answer,
+            uint256 startedAt,
+            uint256 updatedAt,
+            uint80 answeredInRound
+        );
 
-  function latestRoundData()
-    external
-    view
-    returns (
-      uint80 roundId,
-      int256 answer,
-      uint256 startedAt,
-      uint256 updatedAt,
-      uint80 answeredInRound
-    );
+    function latestRoundData()
+        external
+        view
+        returns (
+            uint80 roundId,
+            int256 answer,
+            uint256 startedAt,
+            uint256 updatedAt,
+            uint80 answeredInRound
+        );
 }
-
 
 contract FundMe {
     mapping(address => uint256) public addressToAmountFunded;
+    address public owner;
+    address[] public funders;
+
+    constructor() {
+        owner = msg.sender;
+    }
 
     // functions that are specified as payable can be used to send ether to the contract
     function fund() public payable {
@@ -45,6 +52,7 @@ contract FundMe {
         addressToAmountFunded[msg.sender] += msg.value;
         // the contract will become the owner of the amount of ether that was sent to it!!
         // it can then use that ether to do whatever it wants
+        funders.push(msg.sender);
     }
 
     function getVersion() public view returns (uint256) {
@@ -66,12 +74,14 @@ contract FundMe {
         // startedAt: the timestamp when the round started
         // updatedAt: the timestamp when the round was updated
         // answeredInRound: the round ID of the round where the answer was computed from
-        // this is how we work with tuples in Solidity 
+        // this is how we work with tuples in Solidity
         (, int256 answer, , , ) = priceFeed.latestRoundData();
         return uint256(answer) * uint256(priceFeed.decimals()); // this will return the price in USD to WEI
     }
 
-    function getConversionRate(uint256 ethAmount) public view returns (uint256) {
+    function getConversionRate(
+        uint256 ethAmount
+    ) public view returns (uint256) {
         uint256 ethPrice = getPrice();
         return (ethPrice * ethAmount) / 1e18;
     }
@@ -80,7 +90,7 @@ contract FundMe {
         // suppose we want to make sure a minumum amount of USD is sent to the contract
         // how do we get the current USD price of ether?
         // this is exactly where oracles come in to play
-        // oracles are ways for a contract to get information from the outside world 
+        // oracles are ways for a contract to get information from the outside world
 
         // say 50$
         uint256 minimumUSD = 50 * 1e18;
@@ -89,8 +99,28 @@ contract FundMe {
             "You need to spend more ETH!"
         );
 
-
-
+        addressToAmountFunded[msg.sender] += msg.value;
+        funders.push(msg.sender);
     }
 
+    // anyone can withdraw the funds from the contract - this is a problem
+    function withdraw() public payable onlyOwner {
+        payable(msg.sender).transfer(address(this).balance);
+        // set all the funders back to 0
+        for (
+            uint256 funderIndex = 0;
+            funderIndex < funders.length;
+            funderIndex++
+        ) {
+            address funder = funders[funderIndex];
+            addressToAmountFunded[funder] = 0;
+        }
+        // reset the funders array
+        funders = new address[](0);
+    }
+
+    modifier onlyOwner() {
+        require(msg.sender == owner, "Only the owner can call this function");
+        _;
+    }
 }
